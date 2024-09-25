@@ -7,6 +7,7 @@ const app = express() // 声明app
 
 app.use(cors(), express.json(), express.static(path.join(__dirname, 'public')))
 
+//#region 通用读写函数
 const readTodos = () => { // 读取数据库
 	try {
 		const fileData = fs.readFileSync('todos.json', 'utf8')
@@ -16,47 +17,40 @@ const readTodos = () => { // 读取数据库
 
 const writeTodos = data => { // 写入数据库（数据）
 	try {
+		data.time = new Date().getTime()
 		const jsonData = JSON.stringify(data, null, '\t')
 		fs.writeFileSync('todos.json', jsonData, 'utf8')
 	} catch (err) { throw err }
 }
+// #endregion
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public/test.html'))) // 定义根路由
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html'))) // 定义根路由
+app.get('/test', (req, res) => res.sendFile(path.join(__dirname, 'public/test.html'))) // 测试页面
 
+//#region 任务列表API
 app.get('/api/todo/:user', (req, res) => { // 获取列表（用户名）
 	try {
 		const db = readTodos()
-		res.send(db.todos[req.params.user].list)
+		res.status(200).json(db.todos[req.params.user].list)
 	} catch (err) { res.status(500).send({}) }
 })
-/* fetch('/api/todo/UMSCJK').then(response => response.text())
-	.then(data => console.log(data)).catch(error => console.error('Error:', error)) */
-
 app.get('/api/todo/:user/:id', (req, res) => { // 获取单个列表项（用户名 + 任务id）
 	try {
 		const db = readTodos()
 		const id = req.params.id.toString()
-		res.send(db.todos[req.params.user].list[id])
+		res.status(200).json(db.todos[req.params.user].list[id])
 	} catch (err) { res.status(500).send({}) }
 })
-/* fetch('/api/todo/UMSCJK/1727100207989').then(response => response.text())
-	.then(data => console.log(data)).catch(error => console.error('Error:', error)) */
-
-app.post('/api/todo', (req, res) => { // 添加或修改列表项（用户 + 标题 + 备注）
+app.post('/api/todo', (req, res) => { // 添加或修改列表项（用户 + 标题 + 备注 + 完成情况）
 	try {
 		let temp = readTodos()
-		const now = new Date().getTime()
-		const newTodo = { 'titl': req.body.titl, 'note': req.body.note, 'done': false }
-		temp.todos[req.body.user].list[now] = newTodo
+		const id = req.body.id !== '' ? req.body.id : new Date().getTime()
+		const newTodo = { 'titl': req.body.titl, 'note': req.body.note, 'done': req.body.done }
+		temp.todos[req.body.user].list[id] = newTodo
 		writeTodos(temp)
-		res.status(201).send('Todo added successfully')
+		res.status(201).json({ [id]: newTodo })
 	} catch (err) { res.status(500).send('Error adding todo') }
 })
-/* fetch('/api/todo', {
-	method: 'POST', headers: { 'Content-Type': 'application/json' },
-	body: JSON.stringify({ user: 'UMSCJK', titl: 'title for test', note: 'note for test' })
-}) */
-
 app.delete('/api/todo', (req, res) => { // 删除列表项（用户名 + 任务id）
 	try {
 		let temp = readTodos()
@@ -67,36 +61,28 @@ app.delete('/api/todo', (req, res) => { // 删除列表项（用户名 + 任务i
 		res.status(204).send('Todo deleted successfully')
 	} catch (err) { res.status(500).send('Error deleting todo') }
 })
-/* fetch('/api/todo', {
-	method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-	body: JSON.stringify({ user: 'UMSCJK', id: '1727100212729' })
-}) */
+// #endregion
 
-app.get('/api/user/:name/:pwd', (req, res) => { // 验证用户密码（用户名 + Base64加密后的密码）
+//#region 用户操作API
+app.get('/api/user/verify/:user/:pwd', (req, res) => { // 验证用户密码（用户名 + Base64加密后的密码）
 	try {
 		let temp = readTodos()
-		const name = req.params.name
-		if (!temp.todos[name]) { // 用户不存在
-			res.status(404)
-		} else if (temp.todos[name].pwd === sha1(Base64.decode(req.params.pwd))) {
+		const user = req.params.user
+		if (!temp.todos[user]) { res.status(404) } // 用户不存在
+		else if (temp.todos[user].pwd === sha1(Base64.decode(req.params.pwd))) {
 			res.status(200).send(true) // 验证正确
-		} else {
-			res.status(403).send(false) // 用户存在，密码错误
-		}
+		} else { res.status(403).send(false) } // 用户存在，密码错误
 	} catch (err) { res.status(500).send('Error verifying password') }
 })
 /* fetch('/api/user/UMSCJK/MTE0NTE0').then(response => response.text())
 	.then(data => console.log(data)).catch(error => console.error('Error:', error)) */
 
-app.post('/api/user', (req, res) => { // 注册用户（用户名 + Base64加密后的密码）
+app.post('/api/user/register', (req, res) => { // 注册用户（用户名 + Base64加密后的密码）
 	try {
 		let temp = readTodos()
-		const name = req.body.name
-		if (!temp.todos[name]) {
-			temp.todos[name] = {
-				'pwd': sha1(Base64.decode(req.body.pwd)),
-				'list': {}
-			}
+		const user = req.body.user
+		if (!temp.todos[user]) {
+			temp.todos[user] = { 'pwd': sha1(Base64.decode(req.body.pwd)), 'list': {} }
 		}
 		writeTodos(temp)
 		res.status(201).send('User registered successfully')
@@ -104,15 +90,16 @@ app.post('/api/user', (req, res) => { // 注册用户（用户名 + Base64加密
 })
 /* fetch('/api/user', {
 	method: 'POST', headers: { 'Content-Type': 'application/json' },
-	body: JSON.stringify({ name: 'test-user', pwd: 'VW1zYzIwMjI=' })
+	body: JSON.stringify({ user: 'test-user', pwd: 'VW1zYzIwMjI=' })
 }) */
 
-app.delete('/api/user', (req, res) => { // 注销用户（用户名 + Base64加密后的密码）
+app.delete('/api/user/unregister', (req, res) => { // 注销用户（用户名 + Base64加密后的密码）
 	try {
 		let temp = readTodos()
-		const name = req.body.name
-		if (temp.todos[name] && temp.todos[name].pwd === sha1(Base64.decode(req.body.pwd))) {
-			delete temp.todos[name]
+		const user = req.body.user
+		const pwd = sha1(Base64.decode(req.body.pwd))
+		if (temp.todos[user] && temp.todos[user].pwd === pwd) {
+			delete temp.todos[user]
 		}
 		writeTodos(temp)
 		res.status(201).send('User canceled successfully')
@@ -120,8 +107,24 @@ app.delete('/api/user', (req, res) => { // 注销用户（用户名 + Base64加�
 })
 /* fetch('/api/user', {
 	method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-	body: JSON.stringify({ name: 'test-user', pwd: 'VW1zYzIwMjI=' })
+	body: JSON.stringify({ user: 'test-user', pwd: 'VW1zYzIwMjI=' })
 }) */
+
+app.post('/api/user/change', (req, res) => {// 修改密码（用户名 + 加密后原密码 + 加密后修改密码）
+	try {
+		let temp = readTodos()
+		const user = req.body.user
+		const pwd0 = sha1(Base64.decode(req.body.pwd0))
+		const pwd1 = sha1(Base64.decode(req.body.pwd1))
+		if (temp.todos[user] && temp.todos[user].pwd === pwd0) {
+			temp.todos[user].pwd = pwd1
+		}
+		writeTodos(temp)
+		res.status(201).send('Password changed successfully')
+	} catch (err) { res.status(500).send('Error changing password') }
+})
+
+// #endregion
 
 app.listen(PORT, () => {
 	console.clear()
