@@ -20,7 +20,7 @@ const writeTodos = data => { // 写入数据库（数据）
 // #endregion
 //#region 页面路由
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html'))) // 定义根路由
-app.get('/test', (req, res) => res.sendFile(path.join(__dirname, 'public/test.html'))) // 测试页面
+app.get('/api_demo', (req, res) => res.sendFile(path.join(__dirname, 'public/api_demo'))) // API Demo
 // #endregion
 //#region 任务列表API
 app.get('/api/todo/:user', (req, res) => { // 获取列表（用户名）
